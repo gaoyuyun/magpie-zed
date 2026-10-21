@@ -1,11 +1,27 @@
 {
-  "name": "@magpie-community/opencode-zed-auth",
+  "name": "magpie-zed",
   "version": "0.1.11",
-  "description": "Sign in to a Zed subscription (Zed Pro, trial, student, business) from OpenCode or magpie",
+  "description": "Sign in to a Zed subscription (Zed Pro, trial, student, business) from OpenCode or magpie — upstream's Zed plugin, with fixes that haven't landed there yet",
   "type": "module",
   "main": "./index.mjs",
-  "files": ["index.mjs", "README.md"],
-  "keywords": ["opencode", "opencode-plugin", "magpie", "zed"],
+  "files": [
+    "index.mjs",
+    "README.md",
+    "NOTICE.md"
+  ],
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "magpie",
+    "zed",
+    "magpie-plugin"
+  ],
   "license": "MIT",
-  "repository": { "type": "git", "url": "git+https://github.com/magpie-community/plugins.git", "directory": "packages/zed" }
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gaoyuyun/magpie-zed.git"
+  },
+  "magpie": {
+    "icon": "zed"
+  }
 }
