@@ -656,6 +656,11 @@ function providerRequest(wire, req, model) {
     case "gemini": {
       delete req.session_id
       delete req.sessionId
+      // Zed's cloud reads thinkingLevel as an enum and refuses Google's own
+      // lowercase spelling ("unknown variant `high`, expected one of
+      // `MINIMAL`, `LOW`, `MEDIUM`, `HIGH`"), which the AI SDK and magpie send
+      const tc = req.generationConfig?.thinkingConfig
+      if (typeof tc?.thinkingLevel === "string") tc.thinkingLevel = tc.thinkingLevel.toUpperCase()
       req.model = "models/" + model
       return { req }
     }
