@@ -1,0 +1,113 @@
+# magpie-zed follows upstream's Zed plugin (packages/zed of
+# magpie-community/plugins) and carries this repository's own patches on top.
+#
+# - `upstream` is packages/zed of upstream's main, as its own history at the
+#   root (git subtree split), never committed to here;
+# - `main` is `upstream` plus our patches. When upstream's zed moves, main is
+#   rebased onto it, tested, and pushed; magpie, which installs this plugin as
+#   github:gaoyuyun/magpie-zed, then sees main at a new commit and offers the
+#   update.
+#
+# A rebase that conflicts, or tests that fail, leave main as it was and open
+# (or comment on) an issue saying why. Upstream's commits that don't touch
+# packages/zed change nothing here.
+name: sync-upstream
+
+on:
+  schedule:
+    - cron: "23 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency: sync-upstream
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: follow upstream's packages/zed
+        id: up
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch -q origin upstream
+          git clone -q --filter=blob:none --no-checkout https://github.com/magpie-community/plugins.git "$RUNNER_TEMP/up"
+          # the split is deterministic: the same upstream history gives the
+          # same commits every run, so `upstream` only ever moves forward
+          git -C "$RUNNER_TEMP/up" subtree split -q --prefix=packages/zed origin/main -b zed
+          git fetch -q "$RUNNER_TEMP/up" zed
+          new=$(git rev-parse FETCH_HEAD)
+          old=$(git rev-parse origin/upstream)
+          echo "new=$new" >> "$GITHUB_OUTPUT"
+          if [ "$new" = "$old" ]; then
+            echo "upstream's zed is unchanged at ${new::7}"
+          elif git merge-base --is-ancestor "$old" "$new"; then
+            git push -q origin "$new:refs/heads/upstream"
+            echo "upstream ${old::7} -> ${new::7}"
+          else
+            echo "upstream's zed history was rewritten (${old::7} is not under ${new::7})"
+            echo "rewritten=true" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+      - name: rebase main onto it
+        id: rebase
+        run: |
+          new=${{ steps.up.outputs.new }}
+          echo "before=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          if git merge-base --is-ancestor "$new" HEAD; then
+            echo "main already carries upstream ${new::7}"
+            exit 0
+          fi
+          git rebase "$new" || while :; do
+            # a conflict in package.json alone is upstream's version bump
+            # beside our identity: take upstream's file and give it ours again
+            left=$(git diff --name-only --diff-filter=U)
+            if [ "$left" = "package.json" ]; then
+              git checkout --ours package.json
+              node scripts/fork-package.mjs
+              git add package.json
+              GIT_EDITOR=true git rebase --continue && break || continue
+            fi
+            git rebase --abort
+            echo "conflict=true" >> "$GITHUB_OUTPUT"
+            exit 1
+          done
+          echo "rebased=true" >> "$GITHUB_OUTPUT"
+      - name: test
+        if: steps.rebase.outputs.rebased == 'true'
+        run: |
+          HOME=$(mktemp -d) bun test
+          bun scripts/check.mjs
+      - name: push main
+        if: steps.rebase.outputs.rebased == 'true'
+        run: git push --force-with-lease=main:${{ steps.rebase.outputs.before }} origin HEAD:main
+      - name: say what failed
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEW: ${{ steps.up.outputs.new }}
+          CONFLICT: ${{ steps.rebase.outputs.conflict }}
+          REWRITTEN: ${{ steps.up.outputs.rewritten }}
+        run: |
+          title="sync-upstream: main could not follow upstream"
+          if [ "$REWRITTEN" = "true" ]; then
+            what="upstream's packages/zed history no longer contains the \`upstream\` branch here; reset \`upstream\` to the new split and rebase main by hand"
+          elif [ "$CONFLICT" = "true" ]; then
+            what="rebasing main onto upstream's zed (${NEW::7}) conflicts; resolve it by hand: \`git fetch origin && git rebase origin/upstream\`, then push main"
+          else
+            what="the tests fail on main rebased onto upstream's zed (${NEW::7})"
+          fi
+          body="$what. main was left as it was. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          n=$(gh issue list --state open --search "\"$title\" in:title" --json number -q '.[0].number')
+          if [ -n "$n" ]; then gh issue comment "$n" --body "$body"; else gh issue create --title "$title" --body "$body"; fi

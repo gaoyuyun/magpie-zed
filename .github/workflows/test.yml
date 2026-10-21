@@ -1,0 +1,22 @@
+# Tests every push and pull request to main, as upstream's pr.yml does.
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: test
+        # the tests refuse a real home: no real sign-in is ever read
+        run: HOME=$(mktemp -d) bun test
+      - name: check
+        run: bun scripts/check.mjs

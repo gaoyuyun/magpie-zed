@@ -1,4 +1,20 @@
-# @magpie-community/opencode-zed-auth
+# magpie-zed
+
+**Upstream's Zed plugin for magpie, with fixes that haven't landed there yet**
+— see [NOTICE.md](./NOTICE.md) for what this fork adds and how it follows
+[magpie-community/plugins](https://github.com/magpie-community/plugins/tree/main/packages/zed).
+Install it in magpie with:
+
+```sh
+magpie plugin add github:gaoyuyun/magpie-zed
+magpie plugin off @magpie-community/opencode-zed-auth@latest   # if upstream's is installed
+```
+
+The rest of this README is upstream's.
+
+---
+
+## @magpie-community/opencode-zed-auth
 
 Signs in to a **Zed** subscription (Zed Pro, its trial, a student or business
 plan) and calls the models Zed hosts: Anthropic's, OpenAI's, Google's and
