@@ -656,14 +656,40 @@ function providerRequest(wire, req, model) {
     case "gemini": {
       delete req.session_id
       delete req.sessionId
-      // Zed's cloud reads thinkingLevel as an enum and refuses Google's own
-      // lowercase spelling ("unknown variant `high`, expected one of
-      // `MINIMAL`, `LOW`, `MEDIUM`, `HIGH`"), which the AI SDK and magpie send
-      const tc = req.generationConfig?.thinkingConfig
-      if (typeof tc?.thinkingLevel === "string") tc.thinkingLevel = tc.thinkingLevel.toUpperCase()
+      geminiEnums(req)
       req.model = "models/" + model
       return { req }
     }
+  }
+}
+
+// Zed's cloud reads a Gemini request into its own types (crates/google_ai)
+// before Google sees it, and their enums are spelled otherwise than Google's
+// API takes them: thinkingLevel only upper-case ("unknown variant `high`"),
+// functionCallingConfig.mode only lower-case ("unknown variant `AUTO`"), and
+// some of Google's values aren't there at all. geminiEnums writes each as
+// Zed reads it.
+const ZED_CALLING_MODE = { auto: "auto", any: "any", none: "none", validated: "auto" }
+const ZED_HARM_CATEGORIES = new Set(["HARM_CATEGORY_UNSPECIFIED", "HARM_CATEGORY_DEROGATORY", "HARM_CATEGORY_TOXICITY", "HARM_CATEGORY_VIOLENCE", "HARM_CATEGORY_SEXUAL", "HARM_CATEGORY_MEDICAL", "HARM_CATEGORY_DANGEROUS", "HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_HATE_SPEECH", "HARM_CATEGORY_SEXUALLY_EXPLICIT", "HARM_CATEGORY_DANGEROUS_CONTENT"])
+const ZED_THRESHOLDS = new Set(["HARM_BLOCK_THRESHOLD_UNSPECIFIED", "BLOCK_LOW_AND_ABOVE", "BLOCK_MEDIUM_AND_ABOVE", "BLOCK_ONLY_HIGH", "BLOCK_NONE"])
+
+function geminiEnums(req) {
+  const tc = req.generationConfig?.thinkingConfig
+  if (typeof tc?.thinkingLevel === "string") tc.thinkingLevel = tc.thinkingLevel.toUpperCase()
+  const fc = req.toolConfig?.functionCallingConfig
+  if (typeof fc?.mode === "string") {
+    const mode = ZED_CALLING_MODE[fc.mode.toLowerCase()]
+    if (mode) fc.mode = mode
+    // MODE_UNSPECIFIED, or one Zed doesn't know: Google's default, auto
+    else delete req.toolConfig
+  }
+  if (Array.isArray(req.safetySettings)) {
+    // OFF is BLOCK_NONE to Zed; a category Zed doesn't know (civic
+    // integrity) can't be sent at all
+    req.safetySettings = req.safetySettings
+      .map((s) => ({ ...s, category: String(s?.category ?? "").toUpperCase(), threshold: String(s?.threshold ?? "").toUpperCase().replace(/^OFF$/, "BLOCK_NONE") }))
+      .filter((s) => ZED_HARM_CATEGORIES.has(s.category) && ZED_THRESHOLDS.has(s.threshold))
+    if (!req.safetySettings.length) delete req.safetySettings
   }
 }
 
