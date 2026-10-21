@@ -100,7 +100,8 @@ GitHub login.
 
 magpie's `auth.usage` hook shows what Zed tells its editor of the plan,
 as magpie's built-in Zed account did. Zed doesn't report how much of the
-allowance is spent, so there are no windows:
+allowance is spent, so there are no windows unless a web session was
+given (see Dollar usage below):
 
 - the plan's name (Pro, Pro Trial, Business, Student, VIP). A free
   account's card says "No plan"; its account row still names it Free;
@@ -118,3 +119,31 @@ These come from magpie itself, as they did for the built-in:
   switches between them; plain OpenCode keeps one sign-in per provider.
 - Web search. A model that can't search is given magpie's web-search
   stand-in, when a search API is set up in magpie.
+
+## Dollar usage (optional)
+
+Zed's editor API tells the plan and its period, not what has been spent —
+but the account page on zed.dev does: `GET /frontend/billing/usage`, asked
+with the browser's own session cookie, answers the period's spend in cents
+(`token_spend.spend_in_cents`) and its spending limit. The editor's
+sign-in can't read that page (it answers 401), so the sign-in asks for the
+web session as an optional extra: a `zed.session` cookie pasted from the
+browser's devtools on zed.dev, signed in as the same account — the value
+alone, `zed.session=…`, or a whole Cookie request header. Without it the
+card is as before, and the billing page is not asked.
+
+With it, the card gains the period's allowance — "Token spend $0.25 /
+$10.00", the window carrying the dollars so magpie says it in its own
+number format — which counts like any other subscription's: spent to its
+limit, magpie holds the account until the period ends and the spend
+starts again, as it does a Codex account's window. A web session that has
+run out is a line on the card ("add the web session again to see dollar
+usage"), never an error and never a mark on the account: the editor
+sign-in is a separate one and stays fine. A reply that can't be read, or
+a spend with no limit told, holds nothing — the first is no line at all,
+the second only shown.
+
+The session is kept beside the sign-in pair and, like it, lasts until the
+page refuses it; when it does, sign in again and paste the session then.
+It is an undocumented contract of zed.dev's account page, watched since it
+changed last.
