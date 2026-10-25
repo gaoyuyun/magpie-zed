@@ -42,7 +42,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch -q origin upstream
-          git clone -q --filter=blob:none --no-checkout https://github.com/magpie-community/plugins.git "$RUNNER_TEMP/up"
+          # a full clone: a blob:none one can't serve the split to the fetch below
+          git clone -q --no-checkout https://github.com/magpie-community/plugins.git "$RUNNER_TEMP/up"
           # the split is deterministic: the same upstream history gives the
           # same commits every run, so `upstream` only ever moves forward
           git -C "$RUNNER_TEMP/up" subtree split -q --prefix=packages/zed origin/main -b zed
@@ -99,12 +100,15 @@ jobs:
           NEW: ${{ steps.up.outputs.new }}
           CONFLICT: ${{ steps.rebase.outputs.conflict }}
           REWRITTEN: ${{ steps.up.outputs.rewritten }}
+          UP: ${{ steps.up.outcome }}
         run: |
           title="sync-upstream: main could not follow upstream"
           if [ "$REWRITTEN" = "true" ]; then
             what="upstream's packages/zed history no longer contains the \`upstream\` branch here; reset \`upstream\` to the new split and rebase main by hand"
           elif [ "$CONFLICT" = "true" ]; then
             what="rebasing main onto upstream's zed (${NEW::7}) conflicts; resolve it by hand: \`git fetch origin && git rebase origin/upstream\`, then push main"
+          elif [ "$UP" = "failure" ]; then
+            what="reading upstream's packages/zed failed"
           else
             what="the tests fail on main rebased onto upstream's zed (${NEW::7})"
           fi
