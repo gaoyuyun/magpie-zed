@@ -658,6 +658,13 @@ function providerRequest(wire, req, model) {
       delete req.session_id
       delete req.sessionId
       req.model = "models/" + model
+      // Zed's cloud reads the tool-calling mode in lowercase (auto, any,
+      // none); the Gemini API's proto enums, as the AI SDK and magpie's
+      // Code Assist envelope write them (AUTO, ANY, NONE), are answered 400
+      // "failed to parse Google AI request: unknown variant `AUTO`", so every
+      // turn that declared a tool failed (atticuskk, magpie#4657)
+      const fc = req.toolConfig?.functionCallingConfig
+      if (fc && typeof fc.mode === "string") fc.mode = fc.mode.toLowerCase()
       return { req }
     }
   }
