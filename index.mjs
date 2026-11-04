@@ -642,6 +642,11 @@ function withoutSystemTurns(messages) {
 //     `MINIMAL`, `LOW`, `MEDIUM`, `HIGH`" (#215). An empty one is left out.
 // geminiEnums spells both as Zed takes them (ump45nose, #587).
 const ZED_MODE = { AUTO: "auto", ANY: "any", NONE: "none", VALIDATED: "auto", MODE_UNSPECIFIED: "auto" }
+// Safety settings are read into Zed's enums too: upper-case only, with no
+// OFF (BLOCK_NONE is Zed's) and no civic integrity category, so one Zed
+// doesn't know is left out rather than failing the request.
+const ZED_HARM_CATEGORIES = new Set(["HARM_CATEGORY_UNSPECIFIED", "HARM_CATEGORY_DEROGATORY", "HARM_CATEGORY_TOXICITY", "HARM_CATEGORY_VIOLENCE", "HARM_CATEGORY_SEXUAL", "HARM_CATEGORY_MEDICAL", "HARM_CATEGORY_DANGEROUS", "HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_HATE_SPEECH", "HARM_CATEGORY_SEXUALLY_EXPLICIT", "HARM_CATEGORY_DANGEROUS_CONTENT"])
+const ZED_THRESHOLDS = new Set(["HARM_BLOCK_THRESHOLD_UNSPECIFIED", "BLOCK_LOW_AND_ABOVE", "BLOCK_MEDIUM_AND_ABOVE", "BLOCK_ONLY_HIGH", "BLOCK_NONE"])
 
 function geminiEnums(req) {
   const tc = req.generationConfig?.thinkingConfig
@@ -651,6 +656,12 @@ function geminiEnums(req) {
   }
   const fc = req.toolConfig?.functionCallingConfig
   if (fc && typeof fc.mode === "string") fc.mode = ZED_MODE[fc.mode.toUpperCase()] ?? fc.mode.toLowerCase()
+  if (Array.isArray(req.safetySettings)) {
+    req.safetySettings = req.safetySettings
+      .map((s) => ({ ...s, category: String(s?.category ?? "").toUpperCase(), threshold: String(s?.threshold ?? "").toUpperCase().replace(/^OFF$/, "BLOCK_NONE") }))
+      .filter((s) => ZED_HARM_CATEGORIES.has(s.category) && ZED_THRESHOLDS.has(s.threshold))
+    if (!req.safetySettings.length) delete req.safetySettings
+  }
 }
 
 // providerRequest is the request as Zed takes it for its provider's API,
