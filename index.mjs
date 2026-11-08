@@ -238,6 +238,17 @@ function stateOf(auth) {
   return s
 }
 
+// seen is each signed-in account as magpie last handed it to a hook, by its
+// name: magpie gives a sign-in method no way to read a saved account, so
+// adding a web session to one (addWebSession) gives back the sign-in
+// remembered here, with the session replaced. Only this process's memory.
+const seen = new Map()
+const remember = (auth) => {
+  const s = stateOf(auth)
+  if (s?.who) seen.set(s.who, auth)
+  return s
+}
+
 // picked is each account's organization picked again after the saved one
 // lost its plan: {from: the one its sign-in names, to: the new one}. Once
 // the sign-in is saved with the new one, from no longer matches.
@@ -1347,6 +1358,9 @@ function billingUrl(me, org) {
   return CLOUD + "/frontend/billing/usage"
 }
 
+const ADD_SESSION = "Add a web session to a signed-in Zed account"
+const SESSION_EXPIRED = `the web session has expired: "${ADD_SESSION}" to see dollar usage`
+
 async function billingUsage(cookie, url) {
   if (!cookie || !url) return null
   let res
@@ -1358,8 +1372,7 @@ async function billingUsage(cookie, url) {
   } catch {
     return null
   }
-  if (res.status === 401 || res.status === 403)
-    return { name: "Token spend", used: 0, aside: true, display: "add the web session again to see dollar usage" }
+  if (res.status === 401 || res.status === 403) return { name: "Token spend", used: 0, aside: true, display: SESSION_EXPIRED }
   if (!res.ok) return null
   const v = parse(await res.text())
   const spend = v?.current_usage?.token_spend
@@ -1384,8 +1397,34 @@ async function billingUsage(cookie, url) {
 
 const RFC3339 = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?(Z|[+-]\d\d:\d\d)$/i
 
+// addWebSession gives an account already signed in a web session, or a
+// new one in place of one that ran out, without signing in again: the
+// session is read once against zed.dev, and the account's own sign-in,
+// remembered from magpie's last reading of it (seen), is handed back with
+// only the session replaced. Its accountId and userId are the account's,
+// so magpie keeps it as that account rather than adding one. zed.dev's
+// billing page doesn't say whose spend it is, so a session of another
+// account can't be told apart; which account is the user's word.
+async function addWebSession(inputs) {
+  const cookie = webCookieOf({ webCookie: inputs?.webCookie })
+  if (!cookie) throw new Error("Zed: paste the zed.session cookie (zed.dev in your browser → devtools → Network → any request → Cookie)")
+  const name = String(inputs?.account ?? "").trim()
+  const accounts = [...seen.keys()]
+  if (!accounts.length) throw new Error("Zed: no signed-in Zed account has been read since magpie started: refresh its usage first, then add the web session")
+  const who = name || (accounts.length === 1 ? accounts[0] : "")
+  if (!who) throw new Error(`Zed: name the account to add it to (${accounts.join(", ")})`)
+  const auth = seen.get(who)
+  if (!auth) throw new Error(`Zed: no signed-in Zed account named ${who} (${accounts.join(", ")})`)
+  const read = await billingUsage(cookie, CLOUD + "/frontend/billing/usage")
+  if (!read) throw new Error("Zed: zed.dev's billing page couldn't be read with that web session")
+  if (read.display === SESSION_EXPIRED) throw new Error("Zed: zed.dev refused that web session: copy it again from a browser signed in to zed.dev")
+  const { type, access, refresh, expires, accountId } = auth
+  const back = { type: "success", access, refresh, expires, accountId, webCookie: cookie }
+  return { url: "", instructions: `Adding the web session to ${who}…`, method: "auto", callback: async () => back }
+}
+
 async function usage(auth, save) {
-  const s = stateOf(auth)
+  const s = remember(auth)
   // the built-in's read marked the account only when Zed refused its
   // sign-in, and took the mark off never: a clean read keeps it
   if (!s) return { error: "no such Zed account", signIn: "kept" }
@@ -1461,7 +1500,7 @@ export async function ZedAuthPlugin({ client } = {}) {
       id: PROVIDER,
       // the models the account may call, as Zed's /models lists them now
       async models(provider, { auth } = {}) {
-        const s = stateOf(auth)
+        const s = remember(auth)
         if (!s) return provider.models
         s.save = save
         let l = lists.get(s.userId)
@@ -1511,9 +1550,30 @@ export async function ZedAuthPlugin({ client } = {}) {
           ],
           authorize: signIn,
         },
+        {
+          type: "oauth",
+          label: ADD_SESSION,
+          // the dollar spend for an account signed in already: its sign-in
+          // is kept and only its web session is replaced (addWebSession)
+          prompts: [
+            {
+              type: "text",
+              key: "webCookie",
+              message: "Web session (zed.session cookie from zed.dev, signed in as the same account)",
+              placeholder: "zed.session=… (zed.dev in your browser → devtools → Network → any request → Cookie)",
+            },
+            {
+              type: "text",
+              key: "account",
+              message: "Which Zed account (its name in magpie; press Enter if you have one)",
+              placeholder: "octo",
+            },
+          ],
+          authorize: addWebSession,
+        },
       ],
       async loader(getAuth) {
-        if (!stateOf(await getAuth())) return {}
+        if (!remember(await getAuth())) return {}
         return {
           baseURL: BASE,
           apiKey: "zed", // Zed's model token is put on by the fetch below
@@ -1536,4 +1596,4 @@ export async function ZedAuthPlugin({ client } = {}) {
 }
 
 // for tests
-export const _internal = { said, eventError, stateOf, parseModels, entry, model, providerRequest, wireOf, refusal, failedStatus, decrypt, padded, signedInWith, complete, vendors, tokens, lists, orgOf, planOf, picked, who, planName, usage, threadOf, prompts, SESSION, webCookieOf, billingUsage }
+export const _internal = { said, eventError, stateOf, parseModels, entry, model, providerRequest, wireOf, refusal, failedStatus, decrypt, padded, signedInWith, complete, vendors, tokens, lists, orgOf, planOf, picked, who, planName, usage, threadOf, prompts, SESSION, webCookieOf, billingUsage, addWebSession, seen }
