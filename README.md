@@ -164,13 +164,18 @@ $10.00", the window carrying the dollars so magpie says it in its own
 number format — which counts like any other subscription's: spent to its
 limit, magpie holds the account until the period ends and the spend
 starts again, as it does a Codex account's window. A web session that has
-run out is a line on the card ("add the web session again to see dollar
-usage"), never an error and never a mark on the account: the editor
+run out is a line on the card ("the web session has expired: …"), never
+an error and never a mark on the account: the editor
 sign-in is a separate one and stays fine. A reply that can't be read, or
 a spend with no limit told, holds nothing — the first is no line at all,
 the second only shown.
 
 The session is kept beside the sign-in pair and, like it, lasts until the
-page refuses it; when it does, sign in again and paste the session then.
+page refuses it. An account signed in already, or whose session ran out,
+gets one with **Add a web session to a signed-in Zed account**, with no
+sign-in again: it asks the session (and which account, when there are
+several), checks it against zed.dev, and keeps the account's sign-in as it
+was. It knows the accounts magpie has read since it started, so refresh
+the account's usage first if magpie has just started.
 It is an undocumented contract of zed.dev's account page, watched since it
 changed last.
