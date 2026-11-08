@@ -215,7 +215,7 @@ test("a web session that has run out is a line on the card, not an error: the ed
     plan: "Pro",
     until: "2026-10-01T00:00:00Z",
     signIn: "kept",
-    windows: [{ name: "Token spend", used: 0, aside: true, display: "add the web session again to see dollar usage" }],
+    windows: [{ name: "Token spend", used: 0, aside: true, display: 'the web session has expired: "Add a web session to a signed-in Zed account" to see dollar usage' }],
   })
 })
 
